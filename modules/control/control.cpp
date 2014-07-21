@@ -2,6 +2,10 @@
 #include "entry.hpp"
 #include "control.hpp"
 
+#define SPAWN     "spawn(\"<Process Name>\", \"<IP>\", \"<Port>\")"
+#define KILL      "kill(\"<PID>\", \"<Signal>\")"
+#define SEND_MSG  "send_msg(\"<IP>\", \"<Port>\", \"<Msg>\")"
+
 ENTRY(Control);
 
 
@@ -19,12 +23,11 @@ Control::~Control()
 
 void Control::Help(const v8::FunctionCallbackInfo<v8::Value>& args)
 {
-    const char  * cData = "\
-		\n############# Help #############\
-		\nspawn  spawn <Proc name> <IP> <Port>\
-		\nkill <PID> <Signal>\
-		\nsend_msg <IP>> Port> <Msg>\
-		\nquit";
+    const char  * cData = 
+		"\n############# Help #############\n"
+		"\nSpawn Process: " SPAWN
+		"\nKill Process:  " KILL
+		"\nSend Message:  " SEND_MSG ;
 		
 	args.GetReturnValue().Set(v8::String::New(cData));
 }
@@ -33,7 +36,7 @@ void Control::Spawn(const v8::FunctionCallbackInfo<v8::Value>& args)
 {
     if(3 != args.Length())
     {
-        args.GetReturnValue().Set(v8::String::New("Usage: spawn <Proc name> <IP> <Port>"));
+        args.GetReturnValue().Set(v8::String::New("Usage: " SPAWN));
 		return;
     }
  
@@ -41,18 +44,14 @@ void Control::Spawn(const v8::FunctionCallbackInfo<v8::Value>& args)
 	v8::String::AsciiValue procIP(args[1]);
 	v8::String::AsciiValue procPort(args[2]);
 	
-	char *pcProc = *procObj;
-	char *pcIP = *procIP;
-	char *pcPort = *procPort;
-	
 	char *pcArgs[4];
-        pcArgs[0] = pcProc;
-	pcArgs[1] = pcIP;
-	pcArgs[2] = pcPort;
+    pcArgs[0] = *procObj;
+	pcArgs[1] = *procIP;
+	pcArgs[2] = *procPort;
 	pcArgs[3] = NULL;
 	
 	Control *pProc = ProcService::Get();
-	int  iResult = static_cast<int>(pProc->SpawnProcess(pcProc, pcArgs));
+	int  iResult = static_cast<int>(pProc->SpawnProcess(pcArgs[0], pcArgs));
 	char cBuffer[32] = {'\0'};
 	sprintf(cBuffer, "Spawned Process: %d", iResult);
 	args.GetReturnValue().Set(v8::String::New(cBuffer));
@@ -63,7 +62,7 @@ void Control::Kill(const v8::FunctionCallbackInfo<v8::Value>& args)
 {
     if(2 != args.Length())
     {
-        args.GetReturnValue().Set(v8::String::New("Usage: kill <PID> <Signal>"));
+        args.GetReturnValue().Set(v8::String::New("Usage: " KILL));
 		return;
     }
 
@@ -77,7 +76,7 @@ void Control::Kill(const v8::FunctionCallbackInfo<v8::Value>& args)
 	}
 
     char cBuffer[32] = {'\0'};
-	sprintf(cBuffer, "kill retcod: %d", iRet);
+	sprintf(cBuffer, "kill retcode: %d", iRet);
 	args.GetReturnValue().Set(v8::String::New(cBuffer));
 }
 
@@ -88,9 +87,9 @@ void Control::Dispatch(unsigned int &uAddr, unsigned short &usPort, short sFamil
 	dHandle(serverAddr);
 	
 	TLV tlv;
-        tlv.tl.iType   = 2;
-        tlv.tl.uLength = strlen(pcMsg);
-        tlv.pcValue    = pcMsg;	
+    tlv.tl.iType   = 2;
+    tlv.tl.uLength = strlen(pcMsg);
+    tlv.pcValue    = pcMsg;	
 	unsigned int uMsgLen = 0;
 	char *pMsg = NULL;
 
@@ -103,12 +102,18 @@ void Control::Dispatch(unsigned int &uAddr, unsigned short &usPort, short sFamil
 }
 void Control::SendMsg(const v8::FunctionCallbackInfo<v8::Value>& args)
 {
-        unsigned int uAddr = args[0]->Int32Value();
+    if(3 != args.Length())
+    {
+        args.GetReturnValue().Set(v8::String::New("Usage: " SEND_MSG));
+		return;
+    }
+    
+    unsigned int uAddr = args[0]->Int32Value();
 	unsigned short usPort = htons(args[1]->Int32Value());
 	short sFamily = AF_INET;
 	v8::String::AsciiValue sMsg(args[2]);
 	char *pcMsg = *sMsg;
-        Control *pProc = ProcService::Get();
+    Control *pProc = ProcService::Get();
 	pProc->Dispatch(uAddr, usPort, sFamily, pcMsg);
 	args.GetReturnValue().Set(0);
 }
@@ -116,7 +121,7 @@ void Control::SendMsg(const v8::FunctionCallbackInfo<v8::Value>& args)
 
 void Control::CreateTemplate()
 {
-        v8::Handle<v8::ObjectTemplate> handObject = v8::ObjectTemplate::New();
+    v8::Handle<v8::ObjectTemplate> handObject = v8::ObjectTemplate::New();
 	handObject->Set(v8::String::New("help"), v8::FunctionTemplate::New(Control::Help));	
 	handObject->Set(v8::String::New("spawn"), v8::FunctionTemplate::New(Control::Spawn));
 	handObject->Set(v8::String::New("kill"), v8::FunctionTemplate::New(Control::Kill));
@@ -135,6 +140,7 @@ void Control::ExecuteCommand(v8::Handle<v8::String> sCommand,
 	{	    
 		v8::Handle<v8::Value> handException = TryCatch.Exception();
 		v8::String::AsciiValue sException(handException);
+		printf("Response: %s", "None");
         return;   
 	}
 	v8::Handle<v8::Value> vResult = handScript->Run();
